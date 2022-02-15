@@ -25,7 +25,7 @@ class ObjectController extends Controller
         if (!$findUser) {
             return response()->json([
                 'success'=>false,
-                'message'=>'Вы не авторизованы'
+                'message'=>'Not authorized'
             ], 401);
         }
 
@@ -37,7 +37,7 @@ class ObjectController extends Controller
             if (!$getObject) {
                 return response()->json([
                     'success'=>false,
-                    'message'=>'Папка или файл не найдены'
+                    'message'=>'Folder or file not found'
                 ], 422);
             }
 
@@ -54,7 +54,7 @@ class ObjectController extends Controller
                 if (!$checkCoAuthor) {
                     return response()->json([
                         'success'=>false,
-                        'message'=>'Нет доступа'
+                        'message'=>'No access'
                     ], 403);
                 }
             }
@@ -164,8 +164,14 @@ class ObjectController extends Controller
 
         // добавить name (i)
         if (isset($data['name'])) {
+            $name = $data['name'];
+            if (isset($data['parent_id'])) {
+                $name = $this->renameObject($data['parent_id'], $name, 1);
+            } else {
+                $name = $this->renameObject($folder_id, $name, 1);
+            }
             ObjectModel::where('id', '=', $getObject->id)
-                ->update(['name'=>$data['name']]);
+                ->update(['name'=>$name]);
         }
 
         if (isset($data['parent_id'])) {
@@ -230,6 +236,10 @@ class ObjectController extends Controller
             return $fail;
         }
 
+        if ($folder_id == '0') {
+            $folder_id = NULL;
+        }
+
         if ($request->hasfile('files')) {
             $result = [];
             $files = $request->file('files');
@@ -249,13 +259,16 @@ class ObjectController extends Controller
             // добавить name (i)
             foreach ($files as $file) {
                 $randId = ObjectModel::genId();
+                $nameFile = explode('.' , $file->getClientOriginalName());
+                $nameFile = $nameFile[0];
                 $path = $file->storeAs($folder_id, $randId.'.'.$file->extension());
 
+                $name = $this->renameObject($folder_id, $nameFile, 2);
                 if ($path) {
                     array_push($result, [
                         'success'=>true,
                         'message'=>'Файл загружен',
-                        'name'=>$file->getClientOriginalName(),
+                        'name'=>$nameFile,
                         'url'=>env('APP_URL_UPLOADS').$path,
                         'file_id'=>$randId
                     ]);
@@ -263,7 +276,8 @@ class ObjectController extends Controller
                     ObjectModel::create([
                         'object_id'=>$randId,
                         'parent_id'=>$getObjectParent->id,
-                        'name'=>$file->getClientOriginalName(),
+                        'name'=>$name,
+                        'extension'=>$file->extension(),
                         'url'=>env('APP_URL_UPLOADS').$path,
                         'id_author'=>$getUser->id,
                         'id_type'=>2,
@@ -272,7 +286,7 @@ class ObjectController extends Controller
                     array_push($result, [
                         'success'=>false,
                         'message'=>'Файл не загружен',
-                        'name'=>$file->getClientOriginalName()
+                        'name'=>$name
                     ]);
                 }
             }
@@ -296,12 +310,25 @@ class ObjectController extends Controller
         $getFile = ObjectModel::where('object_id', '=', $file_id)
             ->where('id_type', '=', 2)
             ->first();
+        if (!$getFile) {
+            return response()->json([
+                'success'=>false,
+                'message'=>'file_id не найден'
+            ], 403);
+        }
 
         // добавить name (i)
         $data = $request->all();
         if (isset($data['name'])) {
+            $name = $data['name'];
+            if (isset($data['folder_id'])) {
+                $name = $this->renameObject($data['folder_id'], $name, 2);
+            } else {
+                $name = $this->renameObject($folder_id, $name, 2);
+            }
+
             ObjectModel::where('id', '=', $getFile->id)
-                ->update(['name'=>$data['name']]);
+                ->update(['name'=>$name]);
         }
 
         if (isset($data['folder_id'])) {
@@ -328,11 +355,9 @@ class ObjectController extends Controller
                     ->update(['parent_id'=>$getFolderParent->id]);
             }
 
-            $nameExt = explode('.' ,$getFile->name);
-            $nameExt = $nameExt[count($nameExt) - 1];
-            $nameExt = '.'.$nameExt;
+            $extension = $getFile->extension;
             try {
-                Storage::move($folder_id.'/'.$getFile->object_id.$nameExt, $folder_parent_id.'/'.$getFile->object_id.$nameExt);
+                Storage::move($folder_id.'/'.$getFile->object_id.'.'.$extension, $folder_parent_id.'/'.$getFile->object_id.'.'.$extension);
             } catch (\Exception $e) {
                 return response()->json([
                     'success'=>false,
@@ -364,14 +389,18 @@ class ObjectController extends Controller
         $getFile = ObjectModel::where('object_id', '=', $file_id)
             ->where('id_type', '=', 2)
             ->first();
+        if (!$getFile) {
+            return response()->json([
+                'success'=>true,
+                'message'=>'Файл не найден или уже удален'
+            ], 422);
+        }
 
         ObjectModel::where('id', '=', $getFile->id)
             ->delete();
 
-        $nameExt = explode('.' ,$getFile->name);
-        $nameExt = $nameExt[count($nameExt) - 1];
-        $nameExt = '.'.$nameExt;
-        Storage::delete($folder_id.'/'.$file_id.$nameExt);
+        $extension = $getFile->extension;
+        Storage::delete($folder_id.'/'.$file_id.'.'.$extension);
 
         return response()->json([
             'success'=>true,
@@ -445,9 +474,8 @@ class ObjectController extends Controller
 
         $getFile = ObjectModel::where('object_id', '=', $file_id)
             ->where('id_type', '=', 2)
-            ->select('id', 'name', 'parent_id')
+            ->select('id', 'parent_id', 'extension')
             ->first();
-        $fileName = $getFile->name;
 
         $getParentFolder = ObjectModel::where('id', '=', $getFile->parent_id)
             ->where('id_type', '=', 1)
@@ -458,11 +486,9 @@ class ObjectController extends Controller
             $folderParent = $getParentFolder->object_id.'/';
         }
 
-        $nameExt = explode('.' , $fileName);
-        $nameExt = $nameExt[count($nameExt) - 1];
-        $nameExt = '.'.$nameExt;
+        $extension = $getFile->extension;
+        $pathToFile = storage_path()."/app/public/".$folderParent.$file_id.'.'.$extension;
 
-        $pathToFile = storage_path()."/app/public/".$folderParent.$file_id.$nameExt;
         return response()->download($pathToFile);
     }
 
@@ -921,5 +947,39 @@ class ObjectController extends Controller
         }
 
         return $json;
+    }
+
+    public function renameObject ($parent_id, $name, $type) {
+        $object = ObjectModel::where('object_id', '=', $parent_id)
+            ->where('id_type', '=', 1)
+            ->select('id', 'parent_id')
+            ->first();
+        if (!$object) {
+            return response()->json([
+                'success'=>false,
+                'message'=>$type == 1 ? 'parent_id  не найден' : 'folder_id  не найден'
+            ], 422);
+        }
+
+        $objectsParent = ObjectModel::where('parent_id', '=', $object->id)
+            ->where('id_type', '=', $type)
+            ->select('id', 'name')
+            ->get();
+
+        $counter = 1;
+        foreach ($objectsParent as $object) {
+            if ($object['name'] == $name) {
+                $counter = $counter + 1;
+            }
+            if ($object['name'] == $name . ' (' . $counter. ')') {
+                $counter = $counter + 1;
+            }
+        }
+
+        if ($counter == 1) {
+            return $name;
+        } else {
+            return $name . ' ('.$counter.')';
+        }
     }
 }
