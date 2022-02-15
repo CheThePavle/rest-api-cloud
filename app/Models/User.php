@@ -45,12 +45,4 @@ class User extends Authenticatable
         $this->api_token = NULL;
         $this->save();
     }
-
-    public function check($token) {
-        $findUser = User::where('api_token', '=', $token)->first();
-        if (!$findUser) {
-            return false;
-        }
-        return $findUser->id;
-    }
 }
