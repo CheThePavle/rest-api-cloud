@@ -18,6 +18,7 @@ class ObjectModel extends Model
         'object_id',
         'parent_id',
         'name',
+        'extension',
         'url',
         'id_author',
         'id_type'
