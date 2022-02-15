@@ -63,7 +63,7 @@ class UserController extends Controller
 
         return response()->json([
             'success'=>false,
-            'message'=>'Не правильная почта или пароль'
+            'message'=>'Не верная почта или пароль'
         ], 401);
     }
 
@@ -76,13 +76,6 @@ class UserController extends Controller
                 'success'=>false,
                 'message'=>'Вы не авторизованы'
             ], 401);
-        }
-
-        if (!$token) {
-            return response()->json([
-                'success'=>false,
-                'message'=>'Вearer Token не должен быть пустым'
-            ], 422);
         }
 
         $check = User::where('api_token', '=', $token)->first();

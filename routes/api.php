@@ -14,10 +14,6 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});
-
 
 // Регистрация
 Route::post('/registration', [\App\Http\Controllers\UserController::class, 'registration']);
@@ -25,14 +21,45 @@ Route::post('/registration', [\App\Http\Controllers\UserController::class, 'regi
 // Авторизация
 Route::post('/authorization', [\App\Http\Controllers\UserController::class, 'authorization']);
 
-// Авторизация
+// Выход
 Route::post('/logout', [\App\Http\Controllers\UserController::class, 'logout']);
 
 // Создание папки
 Route::post('/folders', [\App\Http\Controllers\ObjectController::class, 'createFolder']);
 
 // Редактирование папки
-Route::post('/folders/{folder_id}', [\App\Http\Controllers\ObjectController::class, 'changeFolder']);
+Route::patch('/folders/{folder_id}', [\App\Http\Controllers\ObjectController::class, 'changeFolder']);
 
 // Удаление папки
 Route::delete('/folders/{folder_id}', [\App\Http\Controllers\ObjectController::class, 'deleteFolder']);
+
+// Загрузка файлов
+Route::post('/folders/{folder_id}/files', [\App\Http\Controllers\ObjectController::class, 'uploadedFiles']);
+
+// Редактирование файла
+Route::patch('/folders/{folder_id}/files/{file_id}', [\App\Http\Controllers\ObjectController::class, 'changeFile']);
+
+// Удаление файла
+Route::delete('/folders/{folder_id}/files/{file_id}', [\App\Http\Controllers\ObjectController::class, 'deleteFile']);
+
+// Просмотр папки
+Route::get('/folders/{folder_id}', [\App\Http\Controllers\ObjectController::class, 'showFolder']);
+
+// Скачивание файла
+Route::get('/file/{file_id}', [\App\Http\Controllers\ObjectController::class, 'downloadFile']);
+
+// Добавление прав доступа файлу
+Route::post('/folders/{folder_id}/files/{file_id}/accesses', [\App\Http\Controllers\ObjectController::class, 'addAccessFile']);
+// Добавление прав доступа папке
+Route::post('/folders/{folder_id}/accesses', [\App\Http\Controllers\ObjectController::class, 'addAccessFolder']);
+
+// Удаление прав доступа файлу
+Route::delete('/folders/{folder_id}/files/{file_id}/accesses', [\App\Http\Controllers\ObjectController::class, 'deleteAccessFile']);
+// Удаление прав доступа папке
+Route::delete('/folders/{folder_id}/accesses', [\App\Http\Controllers\ObjectController::class, 'deleteAccessFolder']);
+
+// Просмотр папок и файлов пользователя
+Route::get('/disk', [\App\Http\Controllers\ObjectController::class, 'myFolderAndFiles']);
+
+// Просмотр папок и файлов, которые доступны текущему пользователю
+Route::get('/shared', [\App\Http\Controllers\ObjectController::class, 'accessesFolderAndFiles']);

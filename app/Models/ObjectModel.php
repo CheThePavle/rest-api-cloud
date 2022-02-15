@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
+use Str;
+
 
 class ObjectModel extends Model
 {
@@ -36,6 +38,7 @@ class ObjectModel extends Model
         }
     }
 
-
-
+    public function genId() {
+        return Str::lower(Str::random(10));
+    }
 }
