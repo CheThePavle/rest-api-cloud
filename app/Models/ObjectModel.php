@@ -28,18 +28,18 @@ class ObjectModel extends Model
         return $this->hasMany(self::class, 'parent_id');
     }
 
-    public function getChildrenIds(&$arr){
+    public function deleteChildrenFolderFS(&$arr){
         $children = $this->children;
         foreach ($children as $child) {
             Storage::deleteDirectory($child['object_id']);
             if (count($child->children) > 0)
-                $child->getChildrenIds($arr);
+                $child->deleteChildrenFolderFS($arr);
             else
                 array_push($arr, $child->id);
         }
     }
 
-    public function genId() {
+    public function genUniqId() {
         return Str::lower(Str::random(10));
     }
 }
