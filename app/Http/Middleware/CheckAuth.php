@@ -17,6 +17,14 @@ class CheckAuth
      */
     public function handle(Request $request, Closure $next)
     {
+        $token = $request->bearerToken();
+        if (!$token) {
+            return response()->json([
+                'success'=>false,
+                'message'=>'Not authorized'
+            ], 401);
+        }
+
         $findUser = User::where('api_token', '=', $request->bearerToken())
             ->select('id')
             ->first();
