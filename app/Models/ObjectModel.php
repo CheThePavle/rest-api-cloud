@@ -31,7 +31,7 @@ class ObjectModel extends Model
     public function deleteChildrenFolderFS(&$arr){
         $children = $this->children;
         foreach ($children as $child) {
-            Storage::deleteDirectory($child['object_id']);
+            Storage::deleteDirectory(env('FOLDER_UPLOADS').$child['object_id']);
             if (count($child->children) > 0)
                 $child->deleteChildrenFolderFS($arr);
             else

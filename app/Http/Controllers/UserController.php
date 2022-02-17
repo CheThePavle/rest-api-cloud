@@ -53,23 +53,24 @@ class UserController extends Controller
         $check = User::where('email', '=', $data['email'])
                 ->where('password', '=', $data['password'])->first();
 
-        if ($check) {
+        if (!$check) {
             return response()->json([
-                'success'=>true,
-                'message'=>'Успешная авторизация',
-                'token'=>$check->genToken()
-            ], 200);
+                'success'=>false,
+                'message'=>'Не верная почта или пароль'
+            ], 401);
         }
 
         return response()->json([
-            'success'=>false,
-            'message'=>'Не верная почта или пароль'
-        ], 401);
+            'success'=>true,
+            'message'=>'Успешная авторизация',
+            'token'=>$check->genToken()
+        ], 200);
     }
 
     public function logout (Request $request) {
         $token = $request->bearerToken();
-        $check = User::where('api_token', '=', $token)->first();
+        $check = User::where('api_token', '=', $token)
+            ->first();
         $check->out();
 
         return response()->json([
