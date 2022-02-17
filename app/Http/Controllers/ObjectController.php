@@ -295,8 +295,10 @@ class ObjectController extends Controller
             }
 
             $getFolderParent = NULL;
-            $getFolderParent = ObjectModel::where('object_id', '=', $folder_id)
-                ->first();
+            if ($folder_id != '0') {
+                $getFolderParent = ObjectModel::where('object_id', '=', $folder_id)
+                    ->first();
+            }
 
             foreach ($files as $file) {
                 $getUniqId = ObjectModel::genUniqId();
@@ -353,10 +355,13 @@ class ObjectController extends Controller
         $getName = isset($data['name']) ? $data['name'] : false;
         $getUniqParentFolder = isset($data['folder_id']) ? $data['folder_id'] : false;
 
-        $fail = $this->checkAccess($getIdUser, $folder_id);
-        if ($fail) {
-            return $fail;
+        if ($folder_id != '0') {
+            $fail = $this->checkAccess($getIdUser, $folder_id);
+            if ($fail) {
+                return $fail;
+            }
         }
+
         $fail = $this->checkAccess($getIdUser, $file_id);
         if ($fail) {
             return $fail;
@@ -396,10 +401,11 @@ class ObjectController extends Controller
                     ->update(['parent_id'=>$getFolder->id]);
             }
 
+            $folder_id = $folder_id == '0' ? '' : $folder_id.'/';
             $extension = $getFile->extension;
             try {
                 Storage::move(
-                    env('FOLDER_UPLOADS').$folder_id.'/'.$getFile->object_id.'.'.$extension,
+                    env('FOLDER_UPLOADS').$folder_id.$getFile->object_id.'.'.$extension,
                     env('FOLDER_UPLOADS').$getUniqParentFolder.'/'.$getFile->object_id.'.'.$extension
                 );
             } catch (\Exception $e) {
