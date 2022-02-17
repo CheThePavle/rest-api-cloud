@@ -42,4 +42,23 @@ class ObjectModel extends Model
     public function genUniqId() {
         return Str::lower(Str::random(10));
     }
+
+//    public function accessChildren(&$arr, $idCoAuthor){
+//        $children = $this->children;
+//        foreach ($children as $child) {
+//            $checkAccess = Access::where('id_object', '=', $child['id'])
+//                ->where('id_co_author', '=', $idCoAuthor)
+//                ->first();
+//            if (!$checkAccess) {
+//                Access::create([
+//                    'id_object'=>$child['id'],
+//                    'id_co_author'=>$idCoAuthor
+//                ]);
+//            }
+//            if (count($child->children) > 0)
+//                $child->accessChildren($arr, $idCoAuthor);
+//            else
+//                array_push($arr, $child->id);
+//        }
+//    }
 }

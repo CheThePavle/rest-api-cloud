@@ -6,10 +6,11 @@ use App\Models\Access;
 use App\Models\ObjectModel;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Validator;
 
 class AccessesController extends Controller
 {
-    public function checkAuth ($idUser, $objectUniqId) {
+    public function checkAuthor ($idUser, $objectUniqId) {
         $getObject = ObjectModel::where('object_id', '=', $objectUniqId)
             ->first();
         if (!$getObject) {
@@ -44,7 +45,7 @@ class AccessesController extends Controller
         $checkAccess = Access::where('id_object', '=', $objectId)
             ->where('id_co_author', '=', $getAccessUser->id)
             ->first();
-        if ($checkAccess) {
+        if ($checkAccess && !$delete) {
             return response()->json([
                 'success'=>false,
                 'message'=>'Пользователь уже имеет доступ к этому файлу'
@@ -60,8 +61,14 @@ class AccessesController extends Controller
                 'id_object'=>$objectId,
                 'id_co_author'=>$getAccessUser->id
             ]);
+//            $checkFolder = ObjectModel::where('id', '=', $objectId)
+//                ->where('id_type', '=', 1)
+//                ->first();
+//            if ($checkFolder) {
+//                $middleObjects = [];
+//                $checkFolder->accessChildren($middleObjects, $getAccessUser->id);
+//            }
         }
-
 
         $accesses = Access::where('id_object', '=', $objectId)
             ->get();
@@ -80,7 +87,6 @@ class AccessesController extends Controller
             foreach ($accesses as $access) {
                 $idUser = $access['id_co_author'];
                 $findUser = User::where('id', '=', $idUser)
-                    ->select('first_name', 'last_name', 'email')
                     ->first();
 
                 array_push($result, [
@@ -98,11 +104,13 @@ class AccessesController extends Controller
         $data = $request->all();
         $getIdUser = $data['idUser'];
 
-        $fail = $this->checkAuth($getIdUser, $folder_id);
-        if ($fail) {
-            return $fail;
+        if ($folder_id != '0') {
+            $fail = $this->checkAuthor($getIdUser, $folder_id);
+            if ($fail) {
+                return $fail;
+            }
         }
-        $fail = $this->checkAuth($getIdUser, $file_id);
+        $fail = $this->checkAuthor($getIdUser, $file_id);
         if ($fail) {
             return $fail;
         }
@@ -118,7 +126,14 @@ class AccessesController extends Controller
         }
 
         $getFile = ObjectModel::where('object_id', '=', $file_id)
+            ->where('id_type', '=', 2)
             ->first();
+        if (!$getFile) {
+            return response()->json([
+                'success'=>false,
+                'message'=>'Файл не найден'
+            ], 422);
+        }
 
         $email = $data['email'];
 
@@ -129,7 +144,7 @@ class AccessesController extends Controller
         $data = $request->all();
         $getIdUser = $data['idUser'];
 
-        $fail = $this->checkAuth($getIdUser, $folder_id);
+        $fail = $this->checkAuthor($getIdUser, $folder_id);
         if ($fail) {
             return $fail;
         }
@@ -145,7 +160,14 @@ class AccessesController extends Controller
         }
 
         $getFolder = ObjectModel::where('object_id', '=', $folder_id)
+            ->where('id_type', '=', 1)
             ->first();
+        if (!$getFolder) {
+            return response()->json([
+                'success'=>false,
+                'message'=>'Папка не найдена'
+            ], 422);
+        }
 
         $email = $data['email'];
 
@@ -156,11 +178,13 @@ class AccessesController extends Controller
         $data = $request->all();
         $getIdUser = $data['idUser'];
 
-        $fail = $this->checkAuth($getIdUser, $folder_id);
-        if ($fail) {
-            return $fail;
+        if ($folder_id != '0') {
+            $fail = $this->checkAuthor($getIdUser, $folder_id);
+            if ($fail) {
+                return $fail;
+            }
         }
-        $fail = $this->checkAuth($getIdUser, $file_id);
+        $fail = $this->checkAuthor($getIdUser, $file_id);
         if ($fail) {
             return $fail;
         }
@@ -175,8 +199,15 @@ class AccessesController extends Controller
             ], 422);
         }
 
-        $getFile = ObjectModel::where('object_id', '=', $folder_id)
+        $getFile = ObjectModel::where('object_id', '=', $file_id)
+            ->where('id_type', '=', 2)
             ->first();
+        if (!$getFile) {
+            return response()->json([
+                'success'=>false,
+                'message'=>'Файл не найден'
+            ], 422);
+        }
 
         $email = $data['email'];
 
@@ -187,7 +218,7 @@ class AccessesController extends Controller
         $data = $request->all();
         $getIdUser = $data['idUser'];
 
-        $fail = $this->checkAuth($getIdUser, $folder_id);
+        $fail = $this->checkAuthor($getIdUser, $folder_id);
         if ($fail) {
             return $fail;
         }
@@ -203,7 +234,14 @@ class AccessesController extends Controller
         }
 
         $getFolder = ObjectModel::where('object_id', '=', $folder_id)
+            ->where('id_type', '=', 1)
             ->first();
+        if (!$getFolder) {
+            return response()->json([
+                'success'=>false,
+                'message'=>'Папка не найдена'
+            ], 422);
+        }
 
         $email = $data['email'];
 
@@ -237,7 +275,6 @@ class AccessesController extends Controller
                 foreach ($accesses as $access) {
                     $idUser = $access['id_co_author'];
                     $findUser = User::where('id', '=', $idUser)
-                        ->select('first_name', 'last_name', 'email')
                         ->first();
 
                     array_push($accessesResult, [
@@ -277,7 +314,6 @@ class AccessesController extends Controller
                 ->get();
 
             $findUser = User::where('id', '=', $getObject['id_author'])
-                ->select('first_name', 'last_name', 'email')
                 ->first();
 
             array_push($accessesResult, [
@@ -290,7 +326,6 @@ class AccessesController extends Controller
                 foreach ($accesses as $el) {
                     $idUser = $el['id_co_author'];
                     $findUser = User::where('id', '=', $idUser)
-                        ->select('first_name', 'last_name', 'email')
                         ->first();
 
                     array_push($accessesResult, [

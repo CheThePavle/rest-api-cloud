@@ -13,7 +13,7 @@ use Str;
 
 class ObjectController extends Controller
 {
-    public function checkAuthAccess ($idUser, $objectUniqId) {
+    public function checkAccess ($idUser, $objectUniqId) {
         $getObject = ObjectModel::where('object_id', '=', $objectUniqId)
             ->first();
         if (!$getObject) {
@@ -41,13 +41,13 @@ class ObjectController extends Controller
         return false;
     }
 
-    public function renameObject ($uniqParentId, $name, $type) {
+    public function renameObject ($uniqParentId, $name, $type, $uploadToFolder = false) {
         if (!$uniqParentId) {
             $objects = ObjectModel::where('parent_id', '=', NULL)
                 ->where('id_type', '=', $type)
                 ->get();
             if (count($objects) > 0) {
-                $counter = 1;
+                $counter = 0;
                 foreach ($objects as $object) {
                     if ($object['name'] == $name) {
                         $counter = $counter + 1;
@@ -56,7 +56,7 @@ class ObjectController extends Controller
                         $counter = $counter + 1;
                     }
                 }
-                if ($counter == 1) {
+                if ($counter == 0) {
                     return $name;
                 } else {
                     return $name . ' ('.$counter.')';
@@ -65,15 +65,23 @@ class ObjectController extends Controller
 
             return $name;
         } else {
-            $object = ObjectModel::where('object_id', '=', $uniqParentId)
-                ->where('id_type', '=', 1)
-                ->first();
+            if ($uploadToFolder) {
+                $object = ObjectModel::where('object_id', '=', $uniqParentId)
+                    ->where('id_type', '=', 1)
+                    ->first();
+                $objectsParent = ObjectModel::where('parent_id', '=', $object->id)
+                    ->where('id_type', '=', $type)
+                    ->get();
+            } else {
+                $object = ObjectModel::where('object_id', '=', $uniqParentId)
+                    ->where('id_type', '=', $type)
+                    ->first();
+                $objectsParent = ObjectModel::where('parent_id', '=', $object->parent_id)
+                    ->where('id_type', '=', $type)
+                    ->get();
+            }
 
-            $objectsParent = ObjectModel::where('parent_id', '=', $object->id)
-                ->where('id_type', '=', $type)
-                ->get();
-
-            $counter = 1;
+            $counter = 0;
             foreach ($objectsParent as $object) {
                 if ($object['name'] == $name) {
                     $counter = $counter + 1;
@@ -83,7 +91,7 @@ class ObjectController extends Controller
                 }
             }
 
-            if ($counter == 1) {
+            if ($counter == 0) {
                 return $name;
             } else {
                 return $name . ' ('.$counter.')';
@@ -121,7 +129,7 @@ class ObjectController extends Controller
                 ], 422);
             }
         } else {
-            $fail = $this->checkAuthAccess($getIdUser, $getUniqParentId);
+            $fail = $this->checkAccess($getIdUser, $getUniqParentId);
             if ($fail) {
                 return $fail;
             }
@@ -136,19 +144,19 @@ class ObjectController extends Controller
             if ($checkUniqName) {
                 return response()->json([
                     'success'=>false,
-                    'message'=>'Имя папки занято'
+                    'message'=>'Имя папки уже занято'
                 ], 422);
             }
         }
 
         $getUniqId = ObjectModel::genUniqId();
-        Storage::makeDirectory($getUniqId);
+        Storage::makeDirectory(env('FOLDER_UPLOADS').$getUniqId);
         ObjectModel::create([
             'object_id'=>$getUniqId,
             'parent_id'=>$getFolderParentId,
             'name'=>$getName,
             'url'=>env('APP_URL_UPLOADS').$getUniqId,
-            'id_author'=>$data['idUser'],
+            'id_author'=>$getIdUser,
             'id_type'=>1
         ]);
 
@@ -169,10 +177,10 @@ class ObjectController extends Controller
         }
 
         $getIdUser = $data['idUser'];
-        $getName = isset($data['name']);
-        $getUniqParentId = isset($data['parent_id']);
+        $getName = isset($data['name']) ? $data['name'] : false;
+        $getUniqParentId = isset($data['parent_id']) ? $data['parent_id'] : false;
 
-        $fail = $this->checkAuthAccess($getIdUser, $folder_id);
+        $fail = $this->checkAccess($getIdUser, $folder_id);
         if ($fail) {
             return $fail;
         }
@@ -185,7 +193,7 @@ class ObjectController extends Controller
                 if ($getUniqParentId == '0') {
                     $getName = $this->renameObject(false, $getName, 1);
                 } else {
-                    $fail = $this->checkAuthAccess($getIdUser, $getUniqParentId);
+                    $fail = $this->checkAccess($getIdUser, $getUniqParentId);
                     if ($fail) {
                         return $fail;
                     }
@@ -198,12 +206,24 @@ class ObjectController extends Controller
                 ->update(['name'=>$getName]);
         }
 
-        if ($getUniqParentId) {
+        if ($getUniqParentId == '0' || $getUniqParentId) {
             if ($getUniqParentId == '0') {
-                ObjectModel::where('id', '=', $getFolder->id)
-                    ->update(['parent_id'=>NULL]);
+                if (!$getName) {
+                    $getName = ObjectModel::where('id', '=', $getFolder->id)
+                        ->first();
+                    $getName = $this->renameObject(false, $getName->name, 1);
+
+                    ObjectModel::where('id', '=', $getFolder->id)
+                        ->update([
+                            'parent_id'=>NULL,
+                            'name'=>$getName
+                        ]);
+                } else {
+                    ObjectModel::where('id', '=', $getFolder->id)
+                        ->update(['parent_id'=>NULL]);
+                }
             } else {
-                $fail = $this->checkAuthAccess($getIdUser, $getUniqParentId);
+                $fail = $this->checkAccess($getIdUser, $getUniqParentId);
                 if ($fail) {
                     return $fail;
                 }
@@ -225,7 +245,7 @@ class ObjectController extends Controller
         $data = $request->all();
         $getIdUser = $data['idUser'];
 
-        $fail = $this->checkAuthAccess($getIdUser, $folder_id);
+        $fail = $this->checkAccess($getIdUser, $folder_id);
         if ($fail) {
             return $fail;
         }
@@ -235,7 +255,7 @@ class ObjectController extends Controller
         $middleObjects = [];
         $getFolderAndDeleteFS->deleteChildrenFolderFS($middleObjects);
 
-        Storage::deleteDirectory($folder_id);
+        Storage::deleteDirectory(env('FOLDER_UPLOADS').$folder_id);
         ObjectModel::where('id', '=', $getFolderAndDeleteFS->id)
             ->delete();
 
@@ -249,12 +269,12 @@ class ObjectController extends Controller
         $data = $request->all();
         $getIdUser = $data['idUser'];
 
-        $folder_id = isset($folder_id);
-        if ($folder_id) {
+        $folder_id = isset($folder_id) ? $folder_id : false;
+        if ($folder_id == '0' || $folder_id) {
             if ($folder_id == '0') {
-                $folder_id = false;
+                $folder_id = NULL;
             } else {
-                $fail = $this->checkAuthAccess($getIdUser, $folder_id);
+                $fail = $this->checkAccess($getIdUser, $folder_id);
                 if ($fail) {
                     return $fail;
                 }
@@ -275,20 +295,19 @@ class ObjectController extends Controller
             }
 
             $getFolderParent = NULL;
-            if ($folder_id) {
-                $getFolderParent = ObjectModel::where('object_id', '=', $folder_id)
-                    ->first();
-            }
+            $getFolderParent = ObjectModel::where('object_id', '=', $folder_id)
+                ->first();
 
             foreach ($files as $file) {
                 $getUniqId = ObjectModel::genUniqId();
                 $nameFile = explode('.' , $file->getClientOriginalName());
                 $nameFile = $nameFile[0];
+
                 if ($folder_id) {
-                    $path = $file->storeAs($folder_id, $getUniqId.'.'.$file->extension());
-                    $name = $this->renameObject($folder_id, $nameFile, 2);
+                    $path = $file->storeAs(env('FOLDER_UPLOADS').$folder_id, $getUniqId.'.'.$file->extension());
+                    $name = $this->renameObject($folder_id, $nameFile, 2, true);
                 } else {
-                    $path = $file->storeAs('', $getUniqId.'.'.$file->extension());
+                    $path = $file->storeAs(env('FOLDER_UPLOADS'), $getUniqId.'.'.$file->extension());
                     $name = $this->renameObject(false, $nameFile, 2);
                 }
 
@@ -296,7 +315,7 @@ class ObjectController extends Controller
                     array_push($result, [
                         'success'=>true,
                         'message'=>'Файл загружен',
-                        'name'=>$nameFile,
+                        'name'=>$name,
                         'url'=>env('APP_URL_UPLOADS').$path,
                         'file_id'=>$getUniqId
                     ]);
@@ -331,14 +350,14 @@ class ObjectController extends Controller
     public function changeFile (Request $request, $folder_id, $file_id) {
         $data = $request->all();
         $getIdUser = $data['idUser'];
-        $getName = isset($data['name']);
-        $getUniqParentFolder = isset($data['folder_id']);
+        $getName = isset($data['name']) ? $data['name'] : false;
+        $getUniqParentFolder = isset($data['folder_id']) ? $data['folder_id'] : false;
 
-        $fail = $this->checkAuthAccess($getIdUser, $folder_id);
+        $fail = $this->checkAccess($getIdUser, $folder_id);
         if ($fail) {
             return $fail;
         }
-        $fail = $this->checkAuthAccess($getIdUser, $file_id);
+        $fail = $this->checkAccess($getIdUser, $file_id);
         if ($fail) {
             return $fail;
         }
@@ -348,7 +367,7 @@ class ObjectController extends Controller
 
         if ($getName) {
             if ($getUniqParentFolder) {
-                $fail = $this->checkAuthAccess($getIdUser, $getUniqParentFolder);
+                $fail = $this->checkAccess($getIdUser, $getUniqParentFolder);
                 if ($fail) {
                     return $fail;
                 }
@@ -361,12 +380,12 @@ class ObjectController extends Controller
                 ->update(['name'=>$getName]);
         }
 
-        if ($getUniqParentFolder) {
+        if ($getUniqParentFolder == '0' || $getUniqParentFolder) {
             if ($getUniqParentFolder == '0') {
                 ObjectModel::where('id', '=', $getFile->id)
                     ->update(['parent_id'=>NULL]);
             } else {
-                $fail = $this->checkAuthAccess($getIdUser, $getUniqParentFolder);
+                $fail = $this->checkAccess($getIdUser, $getUniqParentFolder);
                 if ($fail) {
                     return $fail;
                 }
@@ -379,11 +398,14 @@ class ObjectController extends Controller
 
             $extension = $getFile->extension;
             try {
-                Storage::move($folder_id.'/'.$getFile->object_id.'.'.$extension, $getUniqParentFolder.'/'.$getFile->object_id.'.'.$extension);
+                Storage::move(
+                    env('FOLDER_UPLOADS').$folder_id.'/'.$getFile->object_id.'.'.$extension,
+                    env('FOLDER_UPLOADS').$getUniqParentFolder.'/'.$getFile->object_id.'.'.$extension
+                );
             } catch (\Exception $e) {
                 return response()->json([
                     'success'=>false,
-                    'message'=>'Что-то пошло не так, файл не найден или уже был перемещен'
+                    'message'=>'Файл не найден в uploads или уже был перемещен'
                 ], 422);
             }
         }
@@ -405,11 +427,13 @@ class ObjectController extends Controller
         $data = $request->all();
         $getIdUser = $data['idUser'];
 
-        $fail = $this->checkAuthAccess($getIdUser, $folder_id);
-        if ($fail) {
-            return $fail;
+        if ($folder_id != '0') {
+            $fail = $this->checkAccess($getIdUser, $folder_id);
+            if ($fail) {
+                return $fail;
+            }
         }
-        $fail = $this->checkAuthAccess($getIdUser, $file_id);
+        $fail = $this->checkAccess($getIdUser, $file_id);
         if ($fail) {
             return $fail;
         }
@@ -421,7 +445,12 @@ class ObjectController extends Controller
             ->delete();
 
         $extension = $getFile->extension;
-        Storage::delete($folder_id.'/'.$file_id.'.'.$extension);
+        if ($folder_id == '0') {
+            Storage::delete(env('FOLDER_UPLOADS').$file_id.'.'.$extension);
+        } else {
+            Storage::delete(env('FOLDER_UPLOADS').$folder_id.'/'.$file_id.'.'.$extension);
+        }
+
 
         return response()->json([
             'success'=>true,
@@ -433,7 +462,7 @@ class ObjectController extends Controller
         $data = $request->all();
         $getIdUser = $data['idUser'];
 
-        $fail = $this->checkAuthAccess($getIdUser, $folder_id);
+        $fail = $this->checkAccess($getIdUser, $folder_id);
         if ($fail) {
             return $fail;
         }
@@ -488,7 +517,7 @@ class ObjectController extends Controller
         $data = $request->all();
         $getIdUser = $data['idUser'];
 
-        $fail = $this->checkAuthAccess($getIdUser, $file_id);
+        $fail = $this->checkAccess($getIdUser, $file_id);
         if ($fail) {
             return $fail;
         }
@@ -505,7 +534,7 @@ class ObjectController extends Controller
         }
 
         $extension = $getFile->extension;
-        $pathFile = storage_path()."/app/public/".$nameFolderFS.$file_id.'.'.$extension;
+        $pathFile = storage_path()."/app/public/".env('FOLDER_UPLOADS').$nameFolderFS.$file_id.'.'.$extension;
 
         return response()->download($pathFile);
     }

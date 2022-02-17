@@ -69,19 +69,8 @@ class UserController extends Controller
 
     public function logout (Request $request) {
         $token = $request->bearerToken();
-
-        $getId = User::check($token);
-        if (!$getId) {
-            return response()->json([
-                'success'=>false,
-                'message'=>'Вы не авторизованы'
-            ], 401);
-        }
-
         $check = User::where('api_token', '=', $token)->first();
-        if ($check) {
-            $check->out();
-        }
+        $check->out();
 
         return response()->json([
             'success'=>true,
