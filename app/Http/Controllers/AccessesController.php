@@ -2,97 +2,259 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Access;
+use App\Models\Accesse;
 use App\Models\ObjectModel;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Validator;
 
+
 class AccessesController extends Controller
 {
-    public function checkAuthor ($idUser, $objectUniqId) {
-        $getObject = ObjectModel::where('object_id', '=', $objectUniqId)
+    public function checkAccess($idUser, $uniqIdObject, $type) {
+        $object = ObjectModel::where('object_id', $uniqIdObject)
+            ->where('id_type', $type)
             ->first();
-        if (!$getObject) {
+        if (!$object) {
             return response()->json([
                 'success'=>false,
-                'message'=>'Folder or file not found'
+                'message'=>'Файл или папка не найдены'
             ], 422);
         }
 
-        $checkAuthor = ObjectModel::where('id', '=', $getObject->id)
-            ->where('id_author', '=', $idUser)
-            ->first();
-        if (!$checkAuthor) {
+        if ($object->id_author != $idUser) {
             return response()->json([
                 'success'=>false,
-                'message'=>'No access object'
-            ], 403);
+                'message'=>'Нет доступа к файлу или папке'
+            ], 422);
         }
 
         return false;
     }
 
-    public function resultAccesses ($email, $objectId, $objectIdAuthor, $delete) {
-        $getAccessUser = User::where('email', '=', $email)
+    public function resultAccesses ($email, $object, $delete = false) {
+        $user = User::where('email', $email)
             ->first();
-        if (!$getAccessUser) {
+        if (!$user) {
             return response()->json([
                 'success'=>false,
-                'message'=>'Пользователь с таким email не найден'
-            ], 422);
-        }
-        $checkAccess = Access::where('id_object', '=', $objectId)
-            ->where('id_co_author', '=', $getAccessUser->id)
-            ->first();
-        if ($checkAccess && !$delete) {
-            return response()->json([
-                'success'=>false,
-                'message'=>'Пользователь уже имеет доступ к этому файлу'
+                'message'=>'Такой email не найден'
             ], 422);
         }
 
         if ($delete) {
-            Access::where('id_object', '=', $objectId)
-                ->where('id_co_author', '=', $getAccessUser->id)
+            Accesse::where('id_object', $object['id'])
+                ->where('id_co_author', $user->id)
                 ->delete();
         } else {
-            Access::create([
-                'id_object'=>$objectId,
-                'id_co_author'=>$getAccessUser->id
+            $checkAccess = Accesse::where('id_object', $object['id'])
+                ->where('id_co_author', $user->id)
+                ->first();
+            if ($checkAccess) {
+                return response()->json([
+                    'success'=>false,
+                    'message'=>'Этот пользователь уже имеет доступ'
+                ], 422);
+            }
+            Accesse::create([
+                'id_object'=>$object['id'],
+                'id_co_author'=>$user->id
             ]);
-//            $checkFolder = ObjectModel::where('id', '=', $objectId)
-//                ->where('id_type', '=', 1)
-//                ->first();
-//            if ($checkFolder) {
-//                $middleObjects = [];
-//                $checkFolder->accessChildren($middleObjects, $getAccessUser->id);
-//            }
         }
 
-        $accesses = Access::where('id_object', '=', $objectId)
+        $resultAcceses = [];
+
+        $findAuthor = User::where('id', $object['id_author'])
+            ->first();
+        array_push($resultAcceses, [
+            'full_name'=>$findAuthor->first_name .' '. $findAuthor->last_name,
+            'email'=>$findAuthor->email,
+            'type'=>'author'
+        ]);
+
+        $accesses = Accesse::where('id_object', $object['id'])
+            ->get();
+
+        if (count($accesses) > 0) {
+            foreach ($accesses as $access) {
+                $findCoAuthor = User::where('id', $access['id_co_author'])
+                    ->first();
+
+                array_push($resultAcceses, [
+                    'full_name'=>$findCoAuthor->first_name .' '. $findCoAuthor->last_name,
+                    'email'=>$findCoAuthor->email,
+                    'type'=>'co-author'
+                ]);
+            }
+        }
+
+        return response()->json($resultAcceses ,200);
+    }
+
+    public function addAccessFile (Request $request, $folder_id, $file_id)
+    {
+        $data = $request->all();
+        $idUser = $data['idUser'];
+
+        if ($folder_id != '0') {
+            $fail = $this->checkAccess($idUser, $folder_id, 1);
+            if ($fail) {
+                return $fail;
+            }
+        }
+        $fail = $this->checkAccess($idUser, $file_id, 2);
+        if ($fail) {
+            return $fail;
+        }
+
+        $validate = Validator::make($data, [
+            'email'=>'required|email'
+        ]);
+        if ($validate->fails()) {
+            return response()->json([
+                'success'=>false,
+                'message'=>$validate->errors()
+            ], 422);
+        }
+
+        $email = $data['email'];
+        $file = ObjectModel::where('object_id', $file_id)
+            ->first();
+
+        return $this->resultAccesses($email, $file);
+    }
+
+    public function addAccessFolder (Request $request, $folder_id)
+    {
+        $data = $request->all();
+        $idUser = $data['idUser'];
+
+        $fail = $this->checkAccess($idUser, $folder_id, 1);
+        if ($fail) {
+            return $fail;
+        }
+
+        $validate = Validator::make($data, [
+            'email'=>'required|email'
+        ]);
+        if ($validate->fails()) {
+            return response()->json([
+                'success'=>false,
+                'message'=>$validate->errors()
+            ], 422);
+        }
+
+        $email = $data['email'];
+        $folder = ObjectModel::where('object_id', $folder_id)
+            ->first();
+
+        return $this->resultAccesses($email, $folder);
+    }
+
+    public function deleteAccessFile (Request $request, $folder_id, $file_id)
+    {
+        $data = $request->all();
+        $idUser = $data['idUser'];
+
+        if ($folder_id != '0') {
+            $fail = $this->checkAccess($idUser, $folder_id, 1);
+            if ($fail) {
+                return $fail;
+            }
+        }
+        $fail = $this->checkAccess($idUser, $file_id, 2);
+        if ($fail) {
+            return $fail;
+        }
+
+        $validate = Validator::make($data, [
+            'email'=>'required|email'
+        ]);
+        if ($validate->fails()) {
+            return response()->json([
+                'success'=>false,
+                'message'=>$validate->errors()
+            ], 422);
+        }
+
+        $email = $data['email'];
+        $file = ObjectModel::where('object_id', $file_id)
+            ->first();
+
+        return $this->resultAccesses($email, $file, true);
+    }
+
+    public function deleteAccessFolder (Request $request, $folder_id)
+    {
+        $data = $request->all();
+        $idUser = $data['idUser'];
+
+        $fail = $this->checkAccess($idUser, $folder_id, 1);
+        if ($fail) {
+            return $fail;
+        }
+
+        $validate = Validator::make($data, [
+            'email'=>'required|email'
+        ]);
+        if ($validate->fails()) {
+            return response()->json([
+                'success'=>false,
+                'message'=>$validate->errors()
+            ], 422);
+        }
+
+        $email = $data['email'];
+        $folder = ObjectModel::where('object_id', $folder_id)
+            ->first();
+
+        return $this->resultAccesses($email, $folder, true);
+    }
+
+    public function disk (Request $request)
+    {
+        $data = $request->all();
+        $idUser = $data['idUser'];
+
+        $objects = ObjectModel::where('id_author', $idUser)
             ->get();
 
         $result = [];
 
-        $findCreator = User::where('id', '=', $objectIdAuthor)
-            ->first();
-        array_push($result, [
-            'full_name'=>$findCreator->first_name . ' ' . $findCreator->last_name,
-            'email'=>$findCreator->email,
-            'type'=>'author'
-        ]);
+        if (count($objects) > 0) {
+            foreach ($objects as $object) {
+                $resultAcceses = [];
 
-        if (count($accesses) > 0) {
-            foreach ($accesses as $access) {
-                $idUser = $access['id_co_author'];
-                $findUser = User::where('id', '=', $idUser)
+                $findAuthor = User::where('id', $object['id_author'])
                     ->first();
+                array_push($resultAcceses, [
+                    'full_name'=>$findAuthor->first_name .' '. $findAuthor->last_name,
+                    'email'=>$findAuthor->email,
+                    'type'=>'author'
+                ]);
+
+                $accesses = Accesse::where('id_object', $object['id'])
+                    ->get();
+
+                if (count($accesses) > 0) {
+                    foreach ($accesses as $access) {
+                        $findCoAuthor = User::where('id', $access['id_co_author'])
+                            ->first();
+
+                        array_push($resultAcceses, [
+                            'full_name'=>$findCoAuthor->first_name .' '. $findCoAuthor->last_name,
+                            'email'=>$findCoAuthor->email,
+                            'type'=>'co-author'
+                        ]);
+                    }
+                }
 
                 array_push($result, [
-                    'full_name'=>$findUser->first_name . ' ' . $findUser->last_name,
-                    'email'=>$findUser->email,
-                    'type'=>'co-author'
+                    'type'=>$object->id_type == 1 ? 'folder' : 'file',
+                    $object->id_type == 1 ? 'folder_id' : 'file_id'=>$object->object_id,
+                    'name'=>$object->name,
+                    'url'=>$object->url,
+                    'acceses'=>$resultAcceses
                 ]);
             }
         }
@@ -100,251 +262,57 @@ class AccessesController extends Controller
         return response()->json($result, 200);
     }
 
-    public function addAccessFile (Request $request, $folder_id, $file_id) {
+    public function shared (Request $request)
+    {
         $data = $request->all();
-        $getIdUser = $data['idUser'];
+        $idUser = $data['idUser'];
 
-        if ($folder_id != '0') {
-            $fail = $this->checkAuthor($getIdUser, $folder_id);
-            if ($fail) {
-                return $fail;
-            }
-        }
-        $fail = $this->checkAuthor($getIdUser, $file_id);
-        if ($fail) {
-            return $fail;
-        }
-
-        $validate = Validator::make($data, [
-            'email'=>'required|email'
-        ]);
-        if ($validate->fails()) {
-            return response()->json([
-                'success'=>false,
-                'message'=>$validate->errors()
-            ], 422);
-        }
-
-        $getFile = ObjectModel::where('object_id', '=', $file_id)
-            ->where('id_type', '=', 2)
-            ->first();
-        if (!$getFile) {
-            return response()->json([
-                'success'=>false,
-                'message'=>'Файл не найден'
-            ], 422);
-        }
-
-        $email = $data['email'];
-
-        return $this->resultAccesses($email, $getFile->id, $getFile->id_author, false);
-    }
-
-    public function addAccessFolder (Request $request, $folder_id) {
-        $data = $request->all();
-        $getIdUser = $data['idUser'];
-
-        $fail = $this->checkAuthor($getIdUser, $folder_id);
-        if ($fail) {
-            return $fail;
-        }
-
-        $validate = Validator::make($data, [
-            'email'=>'required|email'
-        ]);
-        if ($validate->fails()) {
-            return response()->json([
-                'success'=>false,
-                'message'=>$validate->errors()
-            ], 422);
-        }
-
-        $getFolder = ObjectModel::where('object_id', '=', $folder_id)
-            ->where('id_type', '=', 1)
-            ->first();
-        if (!$getFolder) {
-            return response()->json([
-                'success'=>false,
-                'message'=>'Папка не найдена'
-            ], 422);
-        }
-
-        $email = $data['email'];
-
-        return $this->resultAccesses($email, $getFolder->id, $getFolder->id_author, false);
-    }
-
-    public function deleteAccessFile (Request $request, $folder_id, $file_id) {
-        $data = $request->all();
-        $getIdUser = $data['idUser'];
-
-        if ($folder_id != '0') {
-            $fail = $this->checkAuthor($getIdUser, $folder_id);
-            if ($fail) {
-                return $fail;
-            }
-        }
-        $fail = $this->checkAuthor($getIdUser, $file_id);
-        if ($fail) {
-            return $fail;
-        }
-
-        $validate = Validator::make($data, [
-            'email'=>'required|email'
-        ]);
-        if ($validate->fails()) {
-            return response()->json([
-                'success'=>false,
-                'message'=>$validate->errors()
-            ], 422);
-        }
-
-        $getFile = ObjectModel::where('object_id', '=', $file_id)
-            ->where('id_type', '=', 2)
-            ->first();
-        if (!$getFile) {
-            return response()->json([
-                'success'=>false,
-                'message'=>'Файл не найден'
-            ], 422);
-        }
-
-        $email = $data['email'];
-
-        return $this->resultAccesses($email, $getFile->id, $getFile->id_author, true);
-    }
-
-    public function deleteAccessFolder (Request $request, $folder_id) {
-        $data = $request->all();
-        $getIdUser = $data['idUser'];
-
-        $fail = $this->checkAuthor($getIdUser, $folder_id);
-        if ($fail) {
-            return $fail;
-        }
-
-        $validate = Validator::make($data, [
-            'email'=>'required|email'
-        ]);
-        if ($validate->fails()) {
-            return response()->json([
-                'success'=>false,
-                'message'=>$validate->errors()
-            ], 422);
-        }
-
-        $getFolder = ObjectModel::where('object_id', '=', $folder_id)
-            ->where('id_type', '=', 1)
-            ->first();
-        if (!$getFolder) {
-            return response()->json([
-                'success'=>false,
-                'message'=>'Папка не найдена'
-            ], 422);
-        }
-
-        $email = $data['email'];
-
-        return $this->resultAccesses($email, $getFolder->id, $getFolder->id_author, true);
-    }
-
-    public function myFolderAndFiles (Request $request) {
-        $data = $request->all();
-        $getIdUser = $data['idUser'];
-
-        $getUser = User::where('id', '=', $getIdUser)
-            ->first();
-
-        $objects = ObjectModel::where('id_author', '=', $getIdUser)
+        $arrayAcceses = Accesse::where('id_co_author', $idUser)
             ->get();
 
         $result = [];
-        foreach ($objects as $object) {
-            $accessesResult = [];
 
-            $accesses = Access::where('id_object', '=', $object['id'])
-                ->get();
+        if (count($arrayAcceses) > 0) {
+            foreach ($arrayAcceses as $arryAccess) {
+                $object = ObjectModel::where('id', $arryAccess['id_object'])
+                    ->first();
 
-            array_push($accessesResult, [
-                'full_name'=>$getUser->first_name . ' ' . $getUser->last_name,
-                'email'=>$getUser->email,
-                'type'=>'author'
-            ]);
+                $resultAcceses = [];
 
-            if (count($accesses) > 0) {
-                foreach ($accesses as $access) {
-                    $idUser = $access['id_co_author'];
-                    $findUser = User::where('id', '=', $idUser)
-                        ->first();
+                $findAuthor = User::where('id', $object['id_author'])
+                    ->first();
+                array_push($resultAcceses, [
+                    'full_name'=>$findAuthor->first_name .' '. $findAuthor->last_name,
+                    'email'=>$findAuthor->email,
+                    'type'=>'author'
+                ]);
 
-                    array_push($accessesResult, [
-                        'full_name'=>$findUser->first_name . ' ' . $findUser->last_name,
-                        'email'=>$findUser->email,
-                        'type'=>'co-author'
-                    ]);
+                $accesses = Accesse::where('id_object', $object['id'])
+                    ->get();
+
+                if (count($accesses) > 0) {
+                    foreach ($accesses as $access) {
+                        $findCoAuthor = User::where('id', $access['id_co_author'])
+                            ->first();
+
+                        array_push($resultAcceses, [
+                            'full_name'=>$findCoAuthor->first_name .' '. $findCoAuthor->last_name,
+                            'email'=>$findCoAuthor->email,
+                            'type'=>'co-author'
+                        ]);
+                    }
                 }
+
+                array_push($result, [
+                    'type'=>$object->id_type == 1 ? 'folder' : 'file',
+                    $object->id_type == 1 ? 'folder_id' : 'file_id'=>$object->object_id,
+                    'name'=>$object->name,
+                    'url'=>$object->url,
+                    'acceses'=>$resultAcceses
+                ]);
             }
-
-            array_push($result, [
-                'type'=>$object['id_type'] == 1 ? 'folder' : 'file',
-                $object['id_type'] == 1 ? 'folder_id' : 'file_id'=>$object['object_id'],
-                'name'=>$object['name'],
-                'url'=>$object['url'],
-                'accesses'=>count($accessesResult) > 0 ? $accessesResult : 'all'
-            ]);
-        }
-        return $result;
-    }
-
-    public function accessesFolderAndFiles (Request $request) {
-        $data = $request->all();
-        $getIdUser = $data['idUser'];
-
-        $getObjectsAccesses = Access::where('id_co_author', '=', $getIdUser)
-            ->get();
-
-        $result = [];
-        foreach ($getObjectsAccesses as $access) {
-            $getObject = ObjectModel::where('id', '=', $access['id_object'])
-                ->first();
-
-            $accessesResult = [];
-
-            $accesses = Access::where('id_object', '=', $getObject['id'])
-                ->get();
-
-            $findUser = User::where('id', '=', $getObject['id_author'])
-                ->first();
-
-            array_push($accessesResult, [
-                'full_name'=>$findUser->first_name . ' ' . $findUser->last_name,
-                'email'=>$findUser->email,
-                'type'=>'author'
-            ]);
-
-            if (count($accesses) > 0) {
-                foreach ($accesses as $el) {
-                    $idUser = $el['id_co_author'];
-                    $findUser = User::where('id', '=', $idUser)
-                        ->first();
-
-                    array_push($accessesResult, [
-                        'full_name'=>$findUser->first_name . ' ' . $findUser->last_name,
-                        'email'=>$findUser->email,
-                        'type'=>'co-author'
-                    ]);
-                }
-            }
-
-            array_push($result, [
-                'type'=>$getObject['id_type'] == 1 ? 'folder' : 'file',
-                $getObject['id_type'] == 1 ? 'folder_id' : 'file_id'=>$getObject['object_id'],
-                'name'=>$getObject['name'],
-                'url'=>$getObject['url'],
-                'accesses'=>count($accessesResult) > 0 ? $accessesResult : 'all'
-            ]);
         }
 
-        return $result;
+        return response()->json($result, 200);
     }
 }

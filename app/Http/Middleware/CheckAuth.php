@@ -21,20 +21,20 @@ class CheckAuth
         if (!$token) {
             return response()->json([
                 'success'=>false,
-                'message'=>'Not authorized'
-            ], 401);
+                'message'=>'Вы не авторизированы'
+            ], 403);
         }
 
-        $findUser = User::where('api_token', '=', $request->bearerToken())
-            ->select('id')
+        $checkUser = User::where('api_token', $token)
             ->first();
-        if (!$findUser) {
+        if (!$checkUser) {
             return response()->json([
                 'success'=>false,
-                'message'=>'Not authorized'
-            ], 401);
+                'message'=>'Вы не авторизированы'
+            ], 403);
         }
-        $request->merge(['idUser'=>$findUser->id]);
+
+        $request->merge(['idUser'=>$checkUser->id]);
 
         return $next($request);
     }

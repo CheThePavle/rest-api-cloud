@@ -16,9 +16,8 @@ class UserController extends Controller
             'email'=>'required|email|unique:users,email',
             'password'=>'required|min:3|regex:/[a-z]/|regex:/[A-Z]/|regex:/[0-9]/',
             'first_name'=>'required',
-            'last_name'=>'required',
+            'last_name'=>'required'
         ]);
-
         if ($validate->fails()) {
             return response()->json([
                 'success'=>false,
@@ -39,9 +38,8 @@ class UserController extends Controller
 
         $validate = Validator::make($data, [
             'email'=>'required',
-            'password'=>'required',
+            'password'=>'required'
         ]);
-
         if ($validate->fails()) {
             return response()->json([
                 'success'=>false,
@@ -49,29 +47,29 @@ class UserController extends Controller
             ], 422);
         }
 
-
-        $check = User::where('email', '=', $data['email'])
-                ->where('password', '=', $data['password'])->first();
-
+        $check = User::where('email', $data['email'])
+            ->where('password', $data['password'])
+            ->first();
         if (!$check) {
             return response()->json([
                 'success'=>false,
-                'message'=>'Не верная почта или пароль'
-            ], 401);
+                'message'=>'Неверный пароль или email'
+            ], 403);
         }
 
         return response()->json([
             'success'=>true,
-            'message'=>'Успешная авторизация',
-            'token'=>$check->genToken()
+            'message'=>'Успешаня авторизация',
+            'token'=>$check->getToken()
         ], 200);
     }
 
     public function logout (Request $request) {
-        $token = $request->bearerToken();
-        $check = User::where('api_token', '=', $token)
+        $data = $request->all();
+
+        $user = User::where('id', $data['idUser'])
             ->first();
-        $check->out();
+        $user->out();
 
         return response()->json([
             'success'=>true,
