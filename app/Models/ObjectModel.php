@@ -37,7 +37,7 @@ class ObjectModel extends Model
         foreach ($children as $child) {
             Storage::delete(env('FOLDER_DOWLOAD').$child['object_id'].'.'.$child['extension']);
             if (count($child->children) > 0) {
-                $child = $this->deleteChildrenFS($arr);
+                $this->deleteChildrenFS($arr);
             } else {
                 array_push($arr, $child->id);
             }
