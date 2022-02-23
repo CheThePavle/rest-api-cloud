@@ -86,8 +86,8 @@ class ObjectController extends Controller
             }
         }
 
+        // $randUniq = new ObjectModel()
         $randUniq = ObjectModel::getUniqId();
-//        Storage::makeDirectory(env('FOLDER_DOWLOAD').$randUniq);
 
         $parentFolderId = NULL;
         if (isset($folder)) {
@@ -204,6 +204,7 @@ class ObjectController extends Controller
 
             $result = [];
             foreach ($files as $file) {
+                // $randUniq = new ObjectModel()
                 $uniq = ObjectModel::getUniqId();
                 $fullName = $file->getClientOriginalName();
                 $fullName = explode('.', $fullName);
